@@ -19,4 +19,4 @@ while True:
     chat_history.append(AIMessage(content=result.content))
     print(result.content )
 
-print(chat_history)
+print(chat_history)  
