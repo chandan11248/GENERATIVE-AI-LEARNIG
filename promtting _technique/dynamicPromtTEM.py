@@ -28,5 +28,6 @@ if st.button("Summarize"):
     prompt = f"Generate a deep and brief explanation of {paper_input} in {style_input} style in {length_input}"
     result = llm.invoke(prompt)
     st.write(result.content)
+    
 
  
