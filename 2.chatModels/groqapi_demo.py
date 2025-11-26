@@ -3,4 +3,4 @@ from dotenv import load_dotenv
 load_dotenv()
 llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0)
 result=llm.invoke("what is the capital of nepal")
-print(result.content) 
+print(result.content)
