@@ -14,3 +14,4 @@ llm = HuggingFaceEndpoint(
 model = ChatHuggingFace(llm=llm)
 result = model.invoke("what is the capital of nepal?")
 print(result.content)
+
