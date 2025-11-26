@@ -1,16 +1,12 @@
-from dotenv import load_dotenv
-from langchain_openai import ChatOpenAI
-import os
+\
 
-# Load environment variables
-load_dotenv()
+from langchain_huggingface import HuggingFacePipeline,ChatHuggingFace
 
-# Check if key loaded correctly
-print("OpenAI Key =", os.getenv("OPENAI_API_KEY"))
 
-# Create model
-llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
-# Call the model
-result = llm.invoke("What is the capital of Nepal?")
-print("Model Output:", result.content)
+llm=HuggingFacePipeline.from_model_id(model_id="TinyLlama/TinyLlama-1.1B-Chat-v1.0. ",
+                                      task="text-generation")
+
+model=ChatHuggingFace(llm=llm)
+result=model.invoke("what is the capital of nepal?")
+print(result.content)
