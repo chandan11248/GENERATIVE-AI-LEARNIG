@@ -1,6 +1,6 @@
-from langchain_openai import ChatOpenAI
+from langchain_groq import ChatGroq
 from dotenv import load_dotenv
 load_dotenv()
-llm = ChatOpenAI(model="gpt-4.1-mini", temperature=0)
+llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0)
 result=llm.invoke("what is the capital of nepal")
 print(result.content) 
