@@ -6,4 +6,4 @@ llm=HuggingFaceEndpoint(repo_id="openai/gpt-oss-120b",
 model=ChatHuggingFace(llm=llm)
 result=model.invoke("what is the capital of nepal? ")
 print(result.content)
- 
+
