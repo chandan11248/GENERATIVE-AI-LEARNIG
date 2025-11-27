@@ -4,9 +4,8 @@ import os
 
 load_dotenv()
 hf_token = os.getenv("HF_API_TOKEN")
-print(hf_token)
 llm = HuggingFaceEndpoint(
-    repo_id="openai/gpt-oss-120b",
+    repo_id="deepseek-ai/DeepSeek-R1",
     task="text-generation",
     huggingfacehub_api_token=hf_token
 )
