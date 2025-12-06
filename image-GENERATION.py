@@ -6,9 +6,6 @@ from langchain.tools import tool
 # Load environment variables from .env
 load_dotenv()
 
-# HF_TOKEN = os.getenv("HF_TOKEN")
-# if not HF_TOKEN:
-#     raise ValueError("HF_TOKEN not found. Please set it in the .env file.")
 
 client = InferenceClient(
     provider="nscale",
