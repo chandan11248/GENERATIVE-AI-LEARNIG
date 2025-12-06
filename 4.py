@@ -1,35 +1,19 @@
+from diffusers import CogVideoXPipeline
 import torch
-from diffusers import DiffusionPipeline
-import imageio
-import os
 
-# Enable MPS (Apple GPU)
-device = "mps" if torch.backends.mps.is_available() else "cpu"
-
-print(f"Using device: {device}")
-
-# Load model (optimized for 2B)
-pipe = DiffusionPipeline.from_pretrained(
+pipe = CogVideoXPipeline.from_pretrained(
     "THUDM/CogVideoX-2B",
     torch_dtype=torch.float16,
-    variant="fp16"
 )
 
-pipe.to(device)
+pipe.to("mps")  # mps for Mac, cuda for NVIDIA
 
-prompt = "A young man walking on a street, cinematic, 4k"
+result = pipe(
+    prompt="A young man walking on the street, 4k, realistic",
+    guidance_scale=6.0,
+    num_inference_steps=30
+)
 
-print("Generating video frames...")
-
-video_frames = pipe(
-    prompt,
-    num_frames=48,        # best balance for MacBook
-    guidance_scale=6.5,   # sharpness
-    num_inference_steps=20
-).frames
-
-# Save output
-output_path = "output.mp4"
-imageio.mimsave(output_path, video_frames, fps=8)
-
-print(f"Video saved to {output_path}")
+video = result["videos"][0]
+video.save("output.mp4")
+print("Saved output.mp4")
