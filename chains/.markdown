@@ -1,0 +1,143 @@
+# LangChain Retrievers Guide
+
+This notebook demonstrates different types of retrievers in LangChain for document retrieval and search.
+
+---
+
+## 1. Wikipedia Retriever
+
+Retrieves documents directly from Wikipedia based on a query.
+
+```python
+from langchain_community.retrievers import WikipediaRetriever
+
+retriever = WikipediaRetriever(top_k_results=2, lang="en")
+query = "the geopolitical history of india and pakistan from the perspective of a chinese"
+docs = retriever.invoke(query)
+```
+
+**Key Parameters:**
+- `top_k_results`: Number of Wikipedia articles to retrieve
+- `lang`: Language of Wikipedia to search
+
+---
+
+## 2. Vector Store Retriever
+
+Uses vector embeddings to find semantically similar documents.
+
+### Setup
+```python
+from langchain_core.documents import Document
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_community.vectorstores import FAISS
+
+# Create documents
+docs = [
+    Document(page_content="LangChain makes it easy to work with LLMs."),
+    Document(page_content="Embeddings are vector representations of text."),
+    # ... more documents
+]
+
+# Create embeddings and vector store
+embedding = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+vector_store = FAISS.from_documents(documents=docs, embedding=embedding)
+```
+
+### Retriever with MMR (Maximal Marginal Relevance)
+```python
+retriever = vector_store.as_retriever(
+    search_type="mmr",
+    search_kwargs={"k": 3, "lambda_mult": 0.5}
+)
+```
+
+**Key Parameters:**
+| Parameter | Description |
+|-----------|-------------|
+| `search_type` | `"similarity"` or `"mmr"` |
+| `k` | Number of documents to retrieve |
+| `lambda_mult` | Diversity factor (0 = max diversity, 1 = max relevance) |
+
+---
+
+## 3. MultiQuery Retriever
+
+Generates multiple query variations using an LLM to improve retrieval coverage.
+
+```python
+from langchain.retrievers.multi_query import MultiQueryRetriever
+from langchain_groq import ChatGroq
+
+model = ChatGroq(model="llama3-8b-8192")
+
+multiquery_retriever = MultiQueryRetriever.from_llm(
+    retriever=vector_store.as_retriever(search_kwargs={"k": 5}),
+    llm=model
+)
+
+results = multiquery_retriever.invoke("How to improve energy levels?")
+```
+
+**How it works:**
+1. Takes the original query
+2. Uses LLM to generate multiple query variations
+3. Retrieves documents for each variation
+4. Combines and deduplicates results
+
+---
+
+## 4. Contextual Compression Retriever
+
+Compresses retrieved documents to extract only the relevant portions.
+
+```python
+from langchain.retrievers import ContextualCompressionRetriever
+from langchain.retrievers.document_compressors import LLMChainExtractor
+
+# Create base retriever
+base_retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
+
+# Create compressor
+compressor = LLMChainExtractor.from_llm(llm=model)
+
+# Create compression retriever
+compression_retriever = ContextualCompressionRetriever(
+    base_retriever=base_retriever,
+    base_compressor=compressor
+)
+
+results = compression_retriever.invoke("What is photosynthesis?")
+```
+
+**How it works:**
+1. Retrieves documents using base retriever
+2. Uses LLM to extract only query-relevant content
+3. Returns compressed documents with focused content
+
+---
+
+## Comparison Summary
+
+| Retriever | Use Case | Pros | Cons |
+|-----------|----------|------|------|
+| **Wikipedia** | General knowledge queries | No setup needed | Limited to Wikipedia |
+| **Vector Store** | Custom document search | Fast, semantic search | Requires embeddings |
+| **MultiQuery** | Complex queries | Better coverage | Slower, uses LLM |
+| **Contextual Compression** | Precise extraction | Focused results | Slower, uses LLM |
+
+---
+
+## Requirements
+
+```bash
+pip install langchain langchain-community langchain-huggingface langchain-groq faiss-cpu wikipedia
+```
+
+---
+
+## Environment Variables
+
+```bash
+GROQ_API_KEY=your_groq_api_key
+```
