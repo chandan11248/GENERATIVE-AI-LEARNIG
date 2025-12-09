@@ -1,0 +1,323 @@
+# LangChain Vector Database Guide
+
+This folder demonstrates how to use vector databases with LangChain for storing, indexing, and searching document embeddings.
+
+---
+
+## Table of Contents
+
+1. [Setup & Imports](#1-setup--imports)
+2. [Creating Embeddings](#2-creating-embeddings)
+3. [Creating Documents](#3-creating-documents)
+4. [Chroma Vector Store](#4-chroma-vector-store)
+5. [Similarity Search](#5-similarity-search)
+6. [RAG Project Example](#6-rag-project-example)
+
+---
+
+## 1. Setup & Imports
+
+### Installation
+
+```bash
+pip install langchain langchain-huggingface langchain-chroma langchain-community langchain-groq chromadb
+```
+
+### Required Imports
+
+```python
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_chroma import Chroma
+from langchain_core.documents import Document
+```
+
+---
+
+## 2. Creating Embeddings
+
+Use HuggingFace sentence transformers to create embeddings.
+
+```python
+embedding = HuggingFaceEmbeddings(
+    model_name="sentence-transformers/all-MiniLM-L6-v2"
+)
+```
+
+### Popular Embedding Models
+
+| Model | Dimensions | Use Case |
+|-------|------------|----------|
+| `all-MiniLM-L6-v2` | 384 | Fast, general purpose |
+| `all-mpnet-base-v2` | 768 | Higher accuracy |
+| `multi-qa-MiniLM-L6-cos-v1` | 384 | Question-answering |
+
+---
+
+## 3. Creating Documents
+
+Documents in LangChain have two components: `page_content` and `metadata`.
+
+```python
+from langchain_core.documents import Document
+
+doc1 = Document(
+    page_content="Virat Kohli is one of the most successful batsmen in IPL history.",
+    metadata={"team": "Royal Challengers Bangalore"}
+)
+
+doc2 = Document(
+    page_content="Rohit Sharma is the most successful captain in IPL history.",
+    metadata={"team": "Mumbai Indians"}
+)
+
+doc3 = Document(
+    page_content="MS Dhoni has led Chennai Super Kings to multiple IPL titles.",
+    metadata={"team": "Chennai Super Kings"}
+)
+
+doc4 = Document(
+    page_content="Jasprit Bumrah is considered one of the best fast bowlers in T20 cricket.",
+    metadata={"team": "Mumbai Indians"}
+)
+
+doc5 = Document(
+    page_content="Ravindra Jadeja is a dynamic all-rounder for Chennai Super Kings.",
+    metadata={"team": "Chennai Super Kings"}
+)
+
+docs = [doc1, doc2, doc3, doc4, doc5]
+```
+
+---
+
+## 4. Chroma Vector Store
+
+### Creating a Vector Store
+
+```python
+vector_store = Chroma(
+    embedding_function=embedding,
+    persist_directory='my_chroma_db',  # Saves to disk
+    collection_name='sample'
+)
+```
+
+### Key Parameters
+
+| Parameter | Description |
+|-----------|-------------|
+| `embedding_function` | Embedding model to use |
+| `persist_directory` | Path to save the database |
+| `collection_name` | Name of the collection |
+
+### Adding Documents
+
+```python
+# Add documents to the vector store
+vector_store.add_documents(docs)
+```
+
+### Retrieving Stored Data
+
+```python
+# Get all stored data including embeddings
+vector_store.get(include=['embeddings', 'documents', 'metadatas'])
+```
+
+---
+
+## 5. Similarity Search
+
+Find documents similar to a query.
+
+```python
+# Search for similar documents
+results = vector_store.similarity_search(
+    query="who is the bowler",
+    k=3  # Number of results to return
+)
+
+for doc in results:
+    print(doc.page_content)
+    print(doc.metadata)
+```
+
+### Search Methods
+
+| Method | Description |
+|--------|-------------|
+| `similarity_search()` | Returns most similar documents |
+| `similarity_search_with_score()` | Returns documents with similarity scores |
+| `max_marginal_relevance_search()` | Returns diverse results (MMR) |
+
+### Example with Scores
+
+```python
+results = vector_store.similarity_search_with_score(
+    query="who is the captain",
+    k=3
+)
+
+for doc, score in results:
+    print(f"Score: {score}")
+    print(f"Content: {doc.page_content}")
+```
+
+---
+
+## 6. RAG Project Example
+
+A complete Retrieval-Augmented Generation (RAG) implementation.
+
+### Step 1: Load Web Content
+
+```python
+from langchain_community.document_loaders import WebBaseLoader
+
+loader = WebBaseLoader("https://en.wikipedia.org/wiki/Deep_learning")
+text = loader.load()
+```
+
+### Step 2: Split Documents
+
+```python
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+splitter = RecursiveCharacterTextSplitter(
+    chunk_size=700,
+    chunk_overlap=30
+)
+
+chunks = splitter.split_documents(text)
+print(f"Number of chunks: {len(chunks)}")
+```
+
+### Step 3: Store in Vector Database
+
+```python
+vector_db = Chroma(
+    embedding_function=embedding,
+    persist_directory='sample_db',
+    collection_name='NECESSARY_data'
+)
+
+vector_db.add_documents(chunks)
+```
+
+### Step 4: Setup LLM Chain
+
+```python
+from langchain_groq import ChatGroq
+from langchain_core.prompts import PromptTemplate
+from langchain_core.output_parsers import StrOutputParser
+from dotenv import load_dotenv
+
+load_dotenv()
+
+model = ChatGroq(model="llama3-8b-8192")
+
+prompt = PromptTemplate(
+    template="Answer the following question {question} based on given text: {text}",
+    input_variables=["question", "text"]
+)
+
+parser = StrOutputParser()
+chain = prompt | model | parser
+```
+
+### Step 5: Query with RAG
+
+```python
+# Retrieve similar documents
+similar_docs = vector_db.similarity_search(
+    query="what is deep learning",
+    k=5
+)
+
+# Generate answer using LLM
+result = chain.invoke({
+    'question': 'What is deep learning?',
+    'text': similar_docs
+})
+
+print(result)
+```
+
+---
+
+## RAG Flow Diagram
+
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│  Web/Docs   │ ──▶ │   Splitter  │ ──▶ │  Embeddings │
+└─────────────┘     └─────────────┘     └─────────────┘
+                                               │
+                                               ▼
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│   Answer    │ ◀── │     LLM     │ ◀── │ Vector Store│
+└─────────────┘     └─────────────┘     └─────────────┘
+                           ▲                   │
+                           │                   │
+                    ┌─────────────┐            │
+                    │   Prompt    │ ◀──────────┘
+                    │  + Context  │   (similarity search)
+                    └─────────────┘
+```
+
+---
+
+## Text Splitter Options
+
+| Splitter | Use Case |
+|----------|----------|
+| `RecursiveCharacterTextSplitter` | General purpose, preserves structure |
+| `CharacterTextSplitter` | Simple character-based splitting |
+| `TokenTextSplitter` | Token-based for LLM context limits |
+| `MarkdownTextSplitter` | Markdown documents |
+| `HTMLTextSplitter` | HTML documents |
+
+### Splitter Parameters
+
+| Parameter | Description |
+|-----------|-------------|
+| `chunk_size` | Maximum size of each chunk |
+| `chunk_overlap` | Overlap between consecutive chunks |
+| `separators` | Characters to split on (for Recursive) |
+
+---
+
+## Folder Structure
+
+```
+vector database/
+├── README.md
+├── vectordb.ipynb      # Main notebook with examples
+├── my_chroma_db/       # Persisted Chroma database
+└── sample_db/          # Sample project database
+```
+
+---
+
+## Requirements
+
+```bash
+pip install langchain langchain-huggingface langchain-chroma langchain-community langchain-groq langchain-text-splitters chromadb beautifulsoup4
+```
+
+---
+
+## Environment Variables
+
+```bash
+GROQ_API_KEY=your_groq_api_key
+```
+
+---
+
+## Best Practices
+
+1. **Chunk Size**: Choose based on your embedding model's context window
+2. **Chunk Overlap**: Use 10-20% overlap to preserve context
+3. **Persist Directory**: Always set for production to avoid re-embedding
+4. **Metadata**: Include source info for traceability
+5. **k Value**: Start with 3-5 for similarity search, adjust based on results
