@@ -1,137 +1,301 @@
-# LangChain Retrievers Guide
+# LangChain Chains & Runnables Guide
 
-This notebook demonstrates different types of retrievers in LangChain for document retrieval and search.
-
----
-
-## 1. Wikipedia Retriever
-
-Retrieves documents directly from Wikipedia based on a query.
-
-```python
-from langchain_community.retrievers import WikipediaRetriever
-
-retriever = WikipediaRetriever(top_k_results=2, lang="en")
-query = "the geopolitical history of india and pakistan from the perspective of a chinese"
-docs = retriever.invoke(query)
-```
-
-**Key Parameters:**
-- `top_k_results`: Number of Wikipedia articles to retrieve
-- `lang`: Language of Wikipedia to search
+This folder contains notebooks demonstrating various chain patterns and runnable concepts in LangChain.
 
 ---
 
-## 2. Vector Store Retriever
+## Table of Contents
 
-Uses vector embeddings to find semantically similar documents.
-
-### Setup
-```python
-from langchain_core.documents import Document
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_community.vectorstores import FAISS
-
-# Create documents
-docs = [
-    Document(page_content="LangChain makes it easy to work with LLMs."),
-    Document(page_content="Embeddings are vector representations of text."),
-    # ... more documents
-]
-
-# Create embeddings and vector store
-embedding = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-vector_store = FAISS.from_documents(documents=docs, embedding=embedding)
-```
-
-### Retriever with MMR (Maximal Marginal Relevance)
-```python
-retriever = vector_store.as_retriever(
-    search_type="mmr",
-    search_kwargs={"k": 3, "lambda_mult": 0.5}
-)
-```
-
-**Key Parameters:**
-| Parameter | Description |
-|-----------|-------------|
-| `search_type` | `"similarity"` or `"mmr"` |
-| `k` | Number of documents to retrieve |
-| `lambda_mult` | Diversity factor (0 = max diversity, 1 = max relevance) |
+1. [Runnable Concept](#1-runnable-concept)
+2. [Sequential Chain](#2-sequential-chain)
+3. [Runnable Parallel](#3-runnable-parallel)
+4. [Runnable Passthrough](#4-runnable-passthrough)
+5. [Runnable Lambda](#5-runnable-lambda)
+6. [Conditional Chain](#6-conditional-chain)
+7. [Branch Runnable](#7-branch-runnable)
 
 ---
 
-## 3. MultiQuery Retriever
+## 1. Runnable Concept
 
-Generates multiple query variations using an LLM to improve retrieval coverage.
+**File:** `runnable_concept.ipynb`
+
+Introduction to the Runnable interface in LangChain - the foundation for building composable chains.
+
+### Key Concepts
 
 ```python
-from langchain.retrievers.multi_query import MultiQueryRetriever
+from langchain_core.runnables import Runnable
+
+# Every runnable has these core methods:
+runnable.invoke(input)       # Single input
+runnable.batch([inputs])     # Multiple inputs
+runnable.stream(input)       # Streaming output
+await runnable.ainvoke(input) # Async execution
+```
+
+### Runnable Interface Methods
+
+| Method | Description |
+|--------|-------------|
+| `invoke()` | Process a single input |
+| `batch()` | Process multiple inputs in parallel |
+| `stream()` | Stream output tokens/chunks |
+| `ainvoke()` | Async version of invoke |
+
+---
+
+## 2. Sequential Chain
+
+**File:** `sequential_chain.ipynb`
+
+Chains multiple runnables in sequence where output of one becomes input to the next.
+
+### Example
+
+```python
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_groq import ChatGroq
+from langchain_core.output_parsers import StrOutputParser
+
+# Define prompts
+prompt1 = ChatPromptTemplate.from_template("Write a summary of: {topic}")
+prompt2 = ChatPromptTemplate.from_template("Translate to French: {text}")
 
 model = ChatGroq(model="llama3-8b-8192")
+parser = StrOutputParser()
 
-multiquery_retriever = MultiQueryRetriever.from_llm(
-    retriever=vector_store.as_retriever(search_kwargs={"k": 5}),
-    llm=model
-)
+# Sequential chain using pipe operator
+chain = prompt1 | model | parser | prompt2 | model | parser
 
-results = multiquery_retriever.invoke("How to improve energy levels?")
+result = chain.invoke({"topic": "artificial intelligence"})
 ```
 
-**How it works:**
-1. Takes the original query
-2. Uses LLM to generate multiple query variations
-3. Retrieves documents for each variation
-4. Combines and deduplicates results
+### Flow Diagram
+
+```
+Input → Prompt1 → Model → Parser → Prompt2 → Model → Parser → Output
+```
 
 ---
 
-## 4. Contextual Compression Retriever
+## 3. Runnable Parallel
 
-Compresses retrieved documents to extract only the relevant portions.
+**File:** `runnable_parallel.ipynb`
+
+Execute multiple runnables simultaneously and combine their outputs.
+
+### Example
 
 ```python
-from langchain.retrievers import ContextualCompressionRetriever
-from langchain.retrievers.document_compressors import LLMChainExtractor
+from langchain_core.runnables import RunnableParallel
 
-# Create base retriever
-base_retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
-
-# Create compressor
-compressor = LLMChainExtractor.from_llm(llm=model)
-
-# Create compression retriever
-compression_retriever = ContextualCompressionRetriever(
-    base_retriever=base_retriever,
-    base_compressor=compressor
+parallel_chain = RunnableParallel(
+    summary=prompt_summary | model | parser,
+    keywords=prompt_keywords | model | parser,
+    sentiment=prompt_sentiment | model | parser
 )
 
-results = compression_retriever.invoke("What is photosynthesis?")
+# All three run in parallel
+result = parallel_chain.invoke({"text": "LangChain is amazing!"})
+# Returns: {"summary": "...", "keywords": "...", "sentiment": "..."}
 ```
 
-**How it works:**
-1. Retrieves documents using base retriever
-2. Uses LLM to extract only query-relevant content
-3. Returns compressed documents with focused content
+### Use Cases
+
+- Generate multiple outputs from same input
+- Reduce latency by parallelizing independent operations
+- Create structured responses with multiple fields
+
+---
+
+## 4. Runnable Passthrough
+
+**File:** `runnable_passthrough.ipynb`
+
+Pass input data through unchanged, useful for preserving context in chains.
+
+### Example
+
+```python
+from langchain_core.runnables import RunnablePassthrough, RunnableParallel
+
+chain = RunnableParallel(
+    context=retriever,                    # Gets documents
+    question=RunnablePassthrough()        # Passes question unchanged
+) | prompt | model | parser
+
+result = chain.invoke("What is LangChain?")
+```
+
+### Common Patterns
+
+```python
+# Pass through with assignment
+from langchain_core.runnables import RunnablePassthrough
+
+chain = RunnablePassthrough.assign(
+    context=lambda x: retriever.invoke(x["question"])
+)
+```
+
+---
+
+## 5. Runnable Lambda
+
+**File:** `runnable_lambda.ipynb`
+
+Convert any Python function into a runnable for custom transformations.
+
+### Example
+
+```python
+from langchain_core.runnables import RunnableLambda
+
+# Custom transformation function
+def format_docs(docs):
+    return "\n\n".join(doc.page_content for doc in docs)
+
+# Convert to runnable
+format_runnable = RunnableLambda(format_docs)
+
+# Use in chain
+chain = retriever | format_runnable | prompt | model | parser
+```
+
+### Use Cases
+
+- Custom data preprocessing
+- Output formatting/parsing
+- Business logic integration
+- API calls within chains
+
+---
+
+## 6. Conditional Chain
+
+**File:** `conditionla_chain.ipynb`
+
+Route execution based on conditions or input content.
+
+### Example
+
+```python
+from langchain_core.runnables import RunnableBranch, RunnableLambda
+
+def route(input):
+    if "code" in input["question"].lower():
+        return code_chain
+    elif "math" in input["question"].lower():
+        return math_chain
+    else:
+        return general_chain
+
+conditional_chain = RunnableLambda(route)
+
+# Or using RunnableBranch
+chain = RunnableBranch(
+    (lambda x: "code" in x["question"].lower(), code_chain),
+    (lambda x: "math" in x["question"].lower(), math_chain),
+    general_chain  # default
+)
+```
+
+---
+
+## 7. Branch Runnable
+
+**File:** `branch_runnable.ipynb`
+
+Advanced branching with multiple conditions and fallback routes.
+
+### Example
+
+```python
+from langchain_core.runnables import RunnableBranch
+
+branch = RunnableBranch(
+    # Condition 1: Technical questions
+    (
+        lambda x: x["category"] == "technical",
+        technical_prompt | model | parser
+    ),
+    # Condition 2: Sales questions
+    (
+        lambda x: x["category"] == "sales",
+        sales_prompt | model | parser
+    ),
+    # Condition 3: Support questions
+    (
+        lambda x: x["category"] == "support",
+        support_prompt | model | parser
+    ),
+    # Default fallback
+    general_prompt | model | parser
+)
+
+result = branch.invoke({"category": "technical", "question": "How does API work?"})
+```
+
+### Flow Diagram
+
+```
+                    ┌─→ Technical Chain
+                    │
+Input → Condition ──┼─→ Sales Chain
+                    │
+                    ├─→ Support Chain
+                    │
+                    └─→ Default Chain
+```
 
 ---
 
 ## Comparison Summary
 
-| Retriever | Use Case | Pros | Cons |
-|-----------|----------|------|------|
-| **Wikipedia** | General knowledge queries | No setup needed | Limited to Wikipedia |
-| **Vector Store** | Custom document search | Fast, semantic search | Requires embeddings |
-| **MultiQuery** | Complex queries | Better coverage | Slower, uses LLM |
-| **Contextual Compression** | Precise extraction | Focused results | Slower, uses LLM |
+| Pattern | Use Case | Execution |
+|---------|----------|-----------|
+| **Sequential** | Step-by-step processing | One after another |
+| **Parallel** | Multiple independent tasks | Simultaneous |
+| **Passthrough** | Preserve original input | Pass-through |
+| **Lambda** | Custom functions | Inline transformation |
+| **Conditional** | Route based on input | Single branch |
+| **Branch** | Multi-way routing | Condition-based |
+
+---
+
+## Common Patterns
+
+### RAG Chain
+
+```python
+chain = (
+    RunnableParallel(
+        context=retriever | format_docs,
+        question=RunnablePassthrough()
+    )
+    | prompt
+    | model
+    | parser
+)
+```
+
+### Multi-Step Processing
+
+```python
+chain = (
+    RunnablePassthrough.assign(step1=chain1)
+    | RunnablePassthrough.assign(step2=chain2)
+    | final_chain
+)
+```
 
 ---
 
 ## Requirements
 
 ```bash
-pip install langchain langchain-community langchain-huggingface langchain-groq faiss-cpu wikipedia
+pip install langchain langchain-core langchain-groq langchain-community
 ```
 
 ---
