@@ -3,3 +3,5 @@ venv/
 johansson.pdf
 doc.txt
 pdfs/
+sample_db
+my_chroma_db
