@@ -469,8 +469,8 @@ This project is licensed under the MIT License.
 
 **Chandan kumar shah**
 
-- GitHub: [@yourusername](https://github.com/chandan11248)
-- Gmail: [Your Gmail](letschandansah@gmail.com)
+- GitHub: [@chandan11248](https://github.com/chandan11248)
+- Gmail: [letschandansah@gmail.com]()
 
 ---
 
