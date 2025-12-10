@@ -346,7 +346,7 @@ answer = chain.invoke(question)
 | Model | Provider | Purpose |
 |-------|----------|---------|
 | `all-MiniLM-L6-v2` | HuggingFace | Text embeddings (384 dimensions) |
-| `llama3-8b-8192` | Groq | LLM for Q&A and summarization |
+| `openai/gpt-oss-120b` | Groq | LLM for Q&A and summarization |
 
 ---
 
