@@ -1,0 +1,391 @@
+# 🎬 YouTube Video Chatbot
+
+A **RAG (Retrieval-Augmented Generation)** based chatbot that extracts transcripts from YouTube videos, translates them to English, and answers questions using LLM.
+
+---
+
+## 📋 Table of Contents
+
+1. [Overview](#overview)
+2. [Architecture](#architecture)
+3. [Tech Stack](#tech-stack)
+4. [Features](#features)
+5. [Installation](#installation)
+6. [Usage](#usage)
+7. [How It Works](#how-it-works)
+8. [API Reference](#api-reference)
+
+---
+
+## 🎯 Overview
+
+This application allows users to:
+- **Extract transcripts** from any YouTube video
+- **Auto-detect language** and translate to English
+- **Generate AI summaries** of video content
+- **Ask questions** and get context-aware answers
+
+---
+
+## 🏗️ Architecture
+
+### System Block Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           YouTube Video Chatbot                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              INPUT LAYER                                     │
+│  ┌─────────────────────┐    ┌─────────────────────┐                         │
+│  │   YouTube URL       │    │   Manual Transcript │                         │
+│  │   (Video Link)      │    │   (Paste Text)      │                         │
+│  └──────────┬──────────┘    └──────────┬──────────┘                         │
+│             │                          │                                     │
+│             └──────────┬───────────────┘                                     │
+│                        ▼                                                     │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         TRANSCRIPT EXTRACTION                                │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │                    YouTube Transcript API                            │    │
+│  │  ┌─────────────┐   ┌─────────────┐   ┌─────────────────────────┐   │    │
+│  │  │ Extract     │ → │ List        │ → │ Fetch Transcript        │   │    │
+│  │  │ Video ID    │   │ Languages   │   │ (Priority: EN > HI > *) │   │    │
+│  │  └─────────────┘   └─────────────┘   └─────────────────────────┘   │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         TRANSLATION LAYER                                    │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │                     Language Detection                               │    │
+│  │  ┌─────────────┐   ┌─────────────┐   ┌─────────────────────────┐   │    │
+│  │  │ Detect      │ → │ If Not      │ → │ Translate to English    │   │    │
+│  │  │ Language    │   │ English?    │   │ (Google Translate/LLM)  │   │    │
+│  │  └─────────────┘   └─────────────┘   └─────────────────────────┘   │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         PROCESSING LAYER                                     │
+│  ┌───────────────────┐   ┌───────────────────┐   ┌───────────────────┐     │
+│  │  Text Splitter    │ → │  Embedding Model  │ → │  Vector Store     │     │
+│  │  (Chunk: 500)     │   │  (MiniLM-L6-v2)   │   │  (ChromaDB)       │     │
+│  │  (Overlap: 50)    │   │                   │   │                   │     │
+│  └───────────────────┘   └───────────────────┘   └───────────────────┘     │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           RAG PIPELINE                                       │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │                                                                      │    │
+│  │   User Query → Retriever (k=4) → Context + Query → LLM → Answer     │    │
+│  │                                                                      │    │
+│  │   ┌──────────┐   ┌──────────────┐   ┌──────────┐   ┌──────────┐    │    │
+│  │   │ Question │ → │ Similarity   │ → │ Prompt   │ → │ Groq LLM │    │    │
+│  │   │          │   │ Search       │   │ Template │   │ Response │    │    │
+│  │   └──────────┘   └──────────────┘   └──────────┘   └──────────┘    │    │
+│  │                                                                      │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           OUTPUT LAYER                                       │
+│  ┌───────────────────┐   ┌───────────────────┐   ┌───────────────────┐     │
+│  │  📝 Summary       │   │  💬 Q&A Chat      │   │  📜 Transcript    │     │
+│  │  (Key Points)     │   │  (Interactive)    │   │  (Preview)        │     │
+│  └───────────────────┘   └───────────────────┘   └───────────────────┘     │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Data Flow Diagram
+
+```
+┌──────────────┐     ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
+│   YouTube    │     │  Transcript  │     │   Chunks     │     │   Vector     │
+│     URL      │ ──► │    Text      │ ──► │   (500       │ ──► │    Store     │
+│              │     │              │     │   chars)     │     │   (Chroma)   │
+└──────────────┘     └──────────────┘     └──────────────┘     └──────────────┘
+                            │                                         │
+                            ▼                                         ▼
+                     ┌──────────────┐                         ┌──────────────┐
+                     │  Translate   │                         │  Retriever   │
+                     │  to English  │                         │   (Top 4)    │
+                     └──────────────┘                         └──────────────┘
+                                                                      │
+                                                                      ▼
+┌──────────────┐     ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
+│    User      │     │   Prompt     │     │   Groq       │     │   Answer     │
+│   Question   │ ──► │   Template   │ ──► │    LLM       │ ──► │   Response   │
+│              │     │  + Context   │     │              │     │              │
+└──────────────┘     └──────────────┘     └──────────────┘     └──────────────┘
+```
+
+---
+
+## 🛠️ Tech Stack
+
+| Component | Technology | Purpose |
+|-----------|------------|---------|
+| **Frontend** | Streamlit | Web UI Interface |
+| **Transcript API** | youtube-transcript-api | Extract YouTube transcripts |
+| **Translation** | Google Translate / Groq LLM | Multi-language support |
+| **Text Splitting** | LangChain RecursiveCharacterTextSplitter | Chunk documents |
+| **Embeddings** | sentence-transformers/all-MiniLM-L6-v2 | Text to vectors |
+| **Vector Store** | ChromaDB | Store and search embeddings |
+| **LLM** | Groq (llama3-8b-8192) | Generate responses |
+| **Framework** | LangChain | RAG pipeline orchestration |
+
+---
+
+## ✨ Features
+
+### Core Features
+
+| Feature | Description |
+|---------|-------------|
+| 🎬 **YouTube Integration** | Paste any YouTube URL to extract transcript |
+| 🌐 **Multi-Language Support** | Supports 25+ languages including Hindi, Spanish, French |
+| 🔄 **Auto Translation** | Automatically translates non-English transcripts |
+| 📝 **AI Summary** | Generate structured summaries with key points |
+| 💬 **Q&A Chat** | Ask questions and get context-aware answers |
+| 📜 **Transcript Preview** | View the extracted and translated transcript |
+
+### Supported Languages
+
+```
+English, Hindi, Tamil, Telugu, Marathi, Bengali, Gujarati, 
+Punjabi, Kannada, Malayalam, Spanish, French, German, 
+Japanese, Korean, Chinese, Arabic, Portuguese, Russian, 
+Indonesian, Vietnamese, Thai, Turkish, Italian, Dutch, Polish
+```
+
+---
+
+## 📦 Installation
+
+### Prerequisites
+
+- Python 3.10+
+- Groq API Key
+
+### Step 1: Clone Repository
+
+```bash
+git clone https://github.com/yourusername/youtube-chatbot.git
+cd youtube-chatbot
+```
+
+### Step 2: Create Virtual Environment
+
+```bash
+python -m venv venv
+source venv/bin/activate  # On Mac/Linux
+# or
+venv\Scripts\activate     # On Windows
+```
+
+### Step 3: Install Dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### requirements.txt
+
+```
+streamlit>=1.28.0
+langchain>=0.3.0
+langchain-community>=0.3.0
+langchain-huggingface>=0.1.0
+langchain-chroma>=0.1.0
+langchain-groq>=0.2.0
+langchain-core>=0.3.0
+langchain-text-splitters>=0.3.0
+youtube-transcript-api>=1.0.0
+chromadb>=0.4.0
+sentence-transformers>=2.2.0
+python-dotenv>=1.0.0
+googletrans==4.0.0-rc1
+groq
+```
+
+### Step 4: Setup Environment Variables
+
+Create a `.env` file:
+
+```bash
+GROQ_API_KEY=your_groq_api_key_here
+```
+
+### Step 5: Run Application
+
+```bash
+streamlit run 1.py
+```
+
+---
+
+## 🚀 Usage
+
+### Method 1: YouTube URL
+
+```
+1. Open the app in browser (http://localhost:8501)
+2. Paste YouTube URL in sidebar
+3. Click "Load Video"
+4. Wait for transcript extraction and translation
+5. Click "Generate Summary" for AI summary
+6. Ask questions in the chat input
+```
+
+### Method 2: Manual Transcript
+
+```
+1. Copy transcript from any source
+2. Paste in "Or Paste Transcript" section
+3. Click "Load Transcript"
+4. Use summary and Q&A features
+```
+
+---
+
+## 🔧 How It Works
+
+### 1. Transcript Extraction
+
+```python
+# Extract video ID from URL
+video_id = extract_video_id("https://www.youtube.com/watch?v=VIDEO_ID")
+
+# Fetch transcript using YouTube Transcript API
+ytt_api = YouTubeTranscriptApi()
+transcript_list = ytt_api.list(video_id)
+transcript_data = ytt_api.fetch(video_id, languages=['en', 'hi'])
+```
+
+### 2. Language Detection & Translation
+
+```python
+# Using Google Translate
+from googletrans import Translator
+
+translator = Translator()
+detection = translator.detect(text[:500])
+
+if detection.lang != 'en':
+    translated = translator.translate(text, src=detection.lang, dest='en')
+```
+
+### 3. Text Chunking
+
+```python
+# Split text into chunks for better retrieval
+splitter = RecursiveCharacterTextSplitter(
+    chunk_size=500,
+    chunk_overlap=50
+)
+chunks = splitter.split_documents(documents)
+```
+
+### 4. Vector Store Creation
+
+```python
+# Create embeddings and store in ChromaDB
+embedding = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+
+vector_store = Chroma.from_documents(
+    documents=chunks,
+    embedding=embedding,
+    collection_name="youtube_transcript"
+)
+```
+
+### 5. RAG Pipeline
+
+```python
+# Retrieve relevant chunks and generate answer
+retriever = vector_store.as_retriever(search_kwargs={"k": 4})
+
+chain = (
+    {"context": retriever | format_docs, "question": RunnablePassthrough()}
+    | qa_prompt
+    | model
+    | parser
+)
+
+answer = chain.invoke(question)
+```
+
+---
+
+## 📚 API Reference
+
+### Functions
+
+| Function | Parameters | Returns | Description |
+|----------|------------|---------|-------------|
+| `extract_video_id(url)` | YouTube URL | Video ID string | Extracts 11-char video ID from URL |
+| `detect_and_translate(text)` | Text string | (translated_text, language) | Detects language and translates to English |
+| `load_youtube_video(url)` | YouTube URL | (documents, language) | Fetches transcript from YouTube |
+| `create_vector_store(documents)` | Document list | (vector_store, chunks) | Creates ChromaDB vector store |
+| `generate_summary(transcript)` | Transcript text | Summary string | Generates AI summary |
+| `answer_question(question, vector_store)` | Question, VectorStore | Answer string | Answers question using RAG |
+
+### Models Used
+
+| Model | Provider | Purpose |
+|-------|----------|---------|
+| `all-MiniLM-L6-v2` | HuggingFace | Text embeddings (384 dimensions) |
+| `llama3-8b-8192` | Groq | LLM for Q&A and summarization |
+
+---
+
+## 📊 Performance
+
+| Metric | Value |
+|--------|-------|
+| Embedding Dimension | 384 |
+| Chunk Size | 500 characters |
+| Chunk Overlap | 50 characters |
+| Retrieval Top-K | 4 documents |
+| LLM Context Limit | 8,192 tokens |
+
+---
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit changes (`git commit -m 'Add amazing feature'`)
+4. Push to branch (`git push origin feature/amazing-feature`)
+5. Open Pull Request
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License.
+
+---
+
+## 🙏 Acknowledgments
+
+- [LangChain](https://langchain.com/) - RAG framework
+- [Groq](https://groq.com/) - Fast LLM inference
+- [Streamlit](https://streamlit.io/) - Web UI framework
+- [ChromaDB](https://www.trychroma.com/) - Vector database
+- [HuggingFace](https://huggingface.co/) - Embedding models
+
+---
+
+**Made with ❤️ using LangChain & Streamlit**
