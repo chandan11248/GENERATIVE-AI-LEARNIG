@@ -467,7 +467,7 @@ This project is licensed under the MIT License.
 
 ## 👨‍💻 Author
 
-**Your Name**
+**Chandan kumar shah**
 
 - GitHub: [@yourusername](https://github.com/chandan11248)
 - Gmail: [Your Gmail](letschandansah@gmail.com)
